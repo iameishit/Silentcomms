@@ -1,0 +1,29 @@
+# Caddy reverse proxy for the SilentComms backend.
+# Caddy handles HTTPS automatically (Let's Encrypt) — just replace the
+# placeholder domain below with your real one once you have it, then:
+#
+#   sudo caddy run --config Caddyfile
+#
+# or install as a system service (see https://caddyserver.com/docs/running).
+
+api.yourdomain.com {
+	reverse_proxy localhost:3001
+	encode gzip zstd
+}
+
+cdn.yourdomain.com {
+	reverse_proxy localhost:3001
+	encode gzip zstd
+}
+
+gateway.yourdomain.com {
+	reverse_proxy localhost:3001
+}
+
+# Once this is live, update:
+#   1. config.json -> api.endpointPublic / cdn.endpointPublic / gateway.endpointPublic
+#      to the https:// / wss:// versions of the domains above
+#   2. .env -> set security.trustedProxies (via config.json) so the server
+#      trusts Caddy's X-Forwarded-For header for real client IPs, e.g. add
+#      to config.json: "security": { "trustedProxies": "loopback" }
+#   3. Vercel env vars (VITE_API_ENDPOINT etc.) -> point at these same domains

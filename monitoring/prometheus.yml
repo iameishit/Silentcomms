@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert-rules.yml"
+
+scrape_configs:
+  - job_name: "silentcomms-backend"
+    static_configs:
+      # If running multiple clustered processes (THREADS>1), they all share
+      # one HTTP listener/port, so a single target here covers all workers.
+      - targets: ["localhost:3001"]
+    metrics_path: /metrics
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["localhost:9093"] # Alertmanager, if you run one

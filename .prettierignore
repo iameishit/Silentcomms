@@ -1,0 +1,13 @@
+assets
+dist
+node_modules
+.github
+.vscode
+.idea
+hashes.json
+flake.lock
+extra/admin-api
+discord-response-samples
+src/util/migration/postgres-initial.ts
+temp
+scripts/schemaExclusions.json

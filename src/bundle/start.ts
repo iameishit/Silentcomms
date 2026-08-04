@@ -1,0 +1,100 @@
+/*
+	Spacebar: A FOSS re-implementation and extension of the Discord.com backend.
+	Copyright (C) 2023 Spacebar and Spacebar Contributors
+	
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU Affero General Public License as published
+	by the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+	
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU Affero General Public License for more details.
+	
+	You should have received a copy of the GNU Affero General Public License
+	along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+import { config } from "dotenv";
+config({ quiet: true });
+
+import moduleAlias from "module-alias";
+moduleAlias(__dirname + "../../../package.json");
+
+import { initSentry, captureException } from "../util/monitoring/Sentry";
+initSentry();
+
+process.on("unhandledRejection", (err) => {
+    captureException(err);
+    console.error(err);
+});
+process.on("uncaughtException", (err) => {
+    captureException(err);
+    console.error(err);
+});
+
+import cluster, { Worker } from "node:cluster";
+import os from "node:os";
+import "reflect-metadata";
+import { red, bold, yellow, cyan, blueBright, redBright } from "picocolors";
+import { centerString } from "@spacebar/extensions";
+import { getRevInfoOrFail, Logo } from "@spacebar/util";
+import { initStats } from "./stats";
+
+const cores = process.env.THREADS ? parseInt(process.env.THREADS) : 1;
+
+if (cluster.isPrimary) {
+    const revInfo = getRevInfoOrFail();
+    Logo.printLogo().then(() => {
+        const unformatted = `spacebar-server | !! Pre-release build !!`;
+        const formatted = `${blueBright("spacebar-server")} | ${redBright("⚠️ Pre-release build ⚠️")}`;
+        console.log(bold(centerString(unformatted, 86).replace(unformatted, formatted)));
+
+        const shortRev = revInfo.rev ? revInfo.rev.slice(0, 7) : "unknown";
+        const unformattedRevisionHeader = `Commit Hash: ${revInfo.rev !== null ? `${revInfo.rev} (${shortRev})` : "Unknown"}`;
+        const formattedRevisionHeader = `Commit Hash: ${revInfo.rev !== null ? `${cyan(revInfo.rev)} (${yellow(shortRev)})` : "Unknown"}`;
+        console.log(bold(centerString(unformattedRevisionHeader, 86).replace(unformattedRevisionHeader, formattedRevisionHeader)));
+
+        const modifiedTime = new Date(revInfo.lastModified * 1000);
+        const unformattedLastModified = `Last Updated: ${revInfo.lastModified !== 0 ? `${modifiedTime.toUTCString()}` : "Unknown"}`;
+        const formattedLastModified = `Last Updated: ${revInfo.lastModified !== 0 ? `${cyan(modifiedTime.toUTCString())}` : "Unknown"}`;
+        console.log(bold(centerString(unformattedLastModified, 86).replace(unformattedLastModified, formattedLastModified)));
+
+        if (revInfo.rev == null) {
+            console.log(yellow(`Warning: Git is not installed or not in PATH, or the server is not running from a Git repository.`));
+        }
+
+        console.log(`Cores: ${cyan(os.cpus().length)} (Using ${cores} thread(s).)`);
+        initStats();
+
+        console.log(`[Process] Starting with ${cores} threads`);
+
+        if (cores === 1) {
+            require("./Server");
+        } else {
+            process.env.EVENT_TRANSMISSION = "process";
+
+            // Fork workers.
+            for (let i = 0; i < cores; i++) {
+                cluster.fork();
+                console.log(`[Process] Worker ${cyan(i)} started.`);
+            }
+
+            cluster.on("message", (sender: Worker, message) => {
+                for (const id in cluster.workers) {
+                    const worker = cluster.workers[id];
+                    if (worker === sender || !worker) continue;
+                    worker.send(message);
+                }
+            });
+
+            cluster.on("exit", (worker) => {
+                console.log(`[Worker] ${red(`PID ${worker.process.pid} died, restarting ...`)}`);
+                cluster.fork();
+            });
+        }
+    });
+} else {
+    require("./Server");
+}
