@@ -78,6 +78,26 @@ export class Config {
         if (process.env.REQUEST_SIGNATURE_PATH) config.security.requestSignature = await Config.readSecret("REQUEST_SIGNATURE_PATH");
         if (process.env.KLIPY_API_KEY_PATH) config.integrations.gifs.klipy.apiKeyPath = process.env.KLIPY_API_KEY_PATH;
 
+        // Direct (non-file) env var overrides — for hosts like Render where
+        // secrets live in a dashboard "Environment" tab, not on disk as files.
+        // This means NOTHING sensitive needs to be committed in config.json,
+        // and endpoint URLs (which change per-deploy) don't need repo edits either.
+        if (process.env.CAPTCHA_SECRET) config.security.captcha.secret = process.env.CAPTCHA_SECRET.trim();
+        if (process.env.CAPTCHA_SITEKEY) config.security.captcha.sitekey = process.env.CAPTCHA_SITEKEY.trim();
+        if (process.env.MAILJET_API_KEY) config.email.mailjet.apiKey = process.env.MAILJET_API_KEY.trim();
+        if (process.env.MAILJET_API_SECRET) config.email.mailjet.apiSecret = process.env.MAILJET_API_SECRET.trim();
+        if (process.env.EMAIL_SENDER_ADDRESS) config.email.senderAddress = process.env.EMAIL_SENDER_ADDRESS.trim();
+        if (process.env.ABUSEIPDB_API_KEY) config.security.abuseIpDbApiKey = process.env.ABUSEIPDB_API_KEY.trim();
+        if (process.env.IPDATA_API_KEY) config.security.ipdataApiKey = process.env.IPDATA_API_KEY.trim();
+        if (process.env.REQUEST_SIGNATURE) config.security.requestSignature = process.env.REQUEST_SIGNATURE.trim();
+        if (process.env.CDN_SIGNATURE_KEY) config.security.cdnSignatureKey = process.env.CDN_SIGNATURE_KEY.trim();
+        if (process.env.JWT_SECRET) config.security.jwtSecret = process.env.JWT_SECRET.trim();
+        if (process.env.GENERAL_SERVER_NAME) config.general.serverName = process.env.GENERAL_SERVER_NAME.trim();
+        if (process.env.API_ENDPOINT_PUBLIC) config.api.endpointPublic = process.env.API_ENDPOINT_PUBLIC.trim();
+        if (process.env.CDN_ENDPOINT_PUBLIC) config.cdn.endpointPublic = process.env.CDN_ENDPOINT_PUBLIC.trim();
+        if (process.env.CDN_ENDPOINT_PRIVATE) config.cdn.endpointPrivate = process.env.CDN_ENDPOINT_PRIVATE.trim();
+        if (process.env.GATEWAY_ENDPOINT_PUBLIC) config.gateway.endpointPublic = process.env.GATEWAY_ENDPOINT_PUBLIC.trim();
+
         await this.set(config);
         validateFinalConfig(config);
         return config;
@@ -93,11 +113,6 @@ export class Config {
     }
     public static get() {
         if (!config) {
-            // If we haven't initialised the config yet, return default config.
-            // Typeorm instantiates each entity once when initialising database,
-            // which means when we use config values as default values in entity classes,
-            // the config isn't initialised yet and would throw an error about the config being undefined.
-
             return new ConfigValue();
         }
 
@@ -134,14 +149,12 @@ async function applyConfig(val: ConfigValue) {
         else console.log("[WARNING] JSON config file in use, and writing is disabled! Programmatic config changes will not be persisted, and your config will not get updated!");
     else {
         const pairs = generatePairs(val);
-        // keys are sorted to try to influence database order...
         await Promise.all(pairs.sort((x, y) => (x.key > y.key ? 1 : -1)).map((pair) => pair.save()));
     }
     return val;
 }
 
 function pairsToConfig(pairs: ConfigEntity[]) {
-    // TODO: typings
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const value: any = {};
 
@@ -172,7 +185,6 @@ const validateConfig = async () => {
     const config = await ConfigEntity.find({ select: { key: true } });
 
     for (const row in config) {
-        // extension methods...
         if (typeof config[row] === "function") continue;
 
         try {
@@ -200,7 +212,6 @@ const validateConfig = async () => {
 function validateFinalConfig(config: ConfigValue) {
     let hasErrors = false;
     function assertConfig(path: string, condition: (val: JsonValue) => boolean, recommendedValue: string) {
-        // _ to separate keys
         const keys = path.split("_");
         let obj: never = config as never;
 
